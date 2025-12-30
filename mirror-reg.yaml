@@ -1,0 +1,141 @@
+Quay-Mirrror setup
+
+Note: Add a disk with 100GB(sdc) storage capacity
+
+$  lsblk
+
+[root@nfs-keshav-08 ~]# lsblk
+NAME    MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda       8:0    0  100G  0 disk
+├─sda1    8:1    0  600M  0 part
+├─sda2    8:2    0    1G  0 part
+└─sda3    8:3    0 98.4G  0 part
+  ├─rhel-root
+  │     253:0    0 60.8G  0 lvm  /
+  ├─rhel-swap
+  │     253:1    0  7.9G  0 lvm  [SWAP]
+  └─rhel-home
+        253:2    0 29.7G  0 lvm  /home
+sdb       8:16   0  100G  0 disk
+sdc       8:32   0  100G  0 disk
+sr0      11:0    1   11G  0 rom  /run/media/root/RHEL-9-5-0-BaseOS-x86_64
+
+$ mkdir mirror-registry
+
+$ vim /etc/fstab
+
+  /dev/(added disk)   /root/mirror-registry    ext4    defaults   0 0
+:wq!
+
+Format it
+
+$ mkfs.ext4 /dev/sdc
+
+$  mount -a
+
+$  lsblk
+
+[root@nfs-keshav-08 mirror-registry]# lsblk
+NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda             8:0    0  100G  0 disk
+├─sda1          8:1    0  600M  0 part
+├─sda2          8:2    0    1G  0 part
+└─sda3          8:3    0 98.4G  0 part
+  ├─rhel-root 253:0    0 60.8G  0 lvm  /
+  ├─rhel-swap 253:1    0  7.9G  0 lvm  [SWAP]
+  └─rhel-home 253:2    0 29.7G  0 lvm  /home
+sdb             8:16   0  100G  0 disk
+sdc             8:32   0  100G  0 disk /root/mirror-registry
+sr0            11:0    1   11G  0 rom  /run/media/root/RHEL-9-5-0-BaseOS-x86_64
+
+$  df -hT
+
+[root@nfs-keshav-08 mirror-registry]# df -hT
+Filesystem            Type      Size  Used Avail Use% Mounted on
+devtmpfs              devtmpfs  4.0M     0  4.0M   0% /dev
+tmpfs                 tmpfs     7.7G     0  7.7G   0% /dev/shm
+tmpfs                 tmpfs     3.1G  9.4M  3.1G   1% /run
+efivarfs              efivarfs  256K   30K  222K  12% /sys/firmware/efi/efivars
+/dev/mapper/rhel-root xfs        61G   14G   47G  23% /
+/dev/mapper/rhel-home xfs        30G  252M   30G   1% /home
+tmpfs                 tmpfs     1.6G  108K  1.6G   1% /run/user/0
+/dev/sr0              iso9660    11G   11G     0 100% /run/media/root/RHEL-9-5-0-BaseOS-x86_64
+/dev/sdc              ext4       98G   24K   93G   1% /root/mirror-registry
+
+
+$ mkdir mirror-setup
+
+
+$ cd mirror-setup
+
+Download the oc-mirror package tar file from below link:- 
+
+https://developers.redhat.com/content-gateway/file/pub/openshift-v4/clients/mirror-registry/1.3.11/mirror-registry.tar.gz
+
+$ wget https://developers.redhat.com/content-gateway/file/pub/openshift-v4/clients/mirror-registry/1.3.11/mirror-registry.tar.gz
+
+Untar the mirror-registry.tar.gz
+
+$ tar -xvzf mirror-registry.tar.gz
+
+$  ll
+
+Creating quay registry - 
+
+$ ./mirror-registry install  --quayHostname cdvpmroc01.chnocp.cbic.gov.in  --quayRoot /mirror-registry/ --quayStorage /mirror-registry --initPassword ChennaiOcp@12345
+
+Check the quay registry url(quayhostname:8443) in web browser with the given credentials:
+
+$ cat root/mirror-reg/quay-rootCA/rootCA.pem
+
+$ cp /root/mirror-reg/quay-rootCA/rootCA.pem /etc/pki/ca-trust/source/anchors/
+
+$  update-ca-trust
+
+Pushing images to mirror registry:
+
+$  mkdir image-push
+
+$  cd image-push
+
+Download the oc-mirror package file from 4.18.22 version from below link:-
+
+$  wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.18.22/oc-mirror.tar.gz
+
+$ ll
+
+Untar the downloaded tar file:-
+
+$ tar -xvzf oc-mirror.tar.gz
+
+Create a imageset-config.yaml file:-
+
+$ vim imageset-config.yaml
+
+Copy the pull secret from this link https://console.redhat.com/openshift/downloads and put it in a yaml file
+
+$  vim pull-secret.yaml
+
+Cat the pull secret to json file for this install jq - 
+
+
+$ yum install jq -yaml
+
+$ cat ./pull-secret.yaml | jq . > config.json
+
+
+Add the quay registry and auth details to config.json
+
+podman login quay.practice-dis.office.ocpztp.com:8443--authfile=/root/image-push/config.json
+Username: init
+Password: xxxxx
+
+$ mkdir /root/.docker
+
+$ cp config. json /root/.docker
+
+$ ./oc-mirror -c image-set.yml --workspace file://root/deployment-4.19 docker://cdvpmroc01.chnocp.cbic.gov.in:8443/mirror-registry --v2
+
+
+
+
